@@ -9,22 +9,110 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r,warning=FALSE,message=FALSE}
+library(readxl)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(randomForest)
+library(e1071)
+library(naivebayes)
+library(caret)
+library(tidyverse)
+library(caret)
+library(SuperLearner)
+library(gridExtra)
+library(lmtest)
+library(psych)
+library(class)
+library(corrplot)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+## Data Importing and Cleaning
+```{r}
+# Importing CaseStudy2dataset from github 
+CaseStudy2dataset <- read.table("https://raw.githubusercontent.com/lijjumathew/MSDS-Doing-Datascience-Project2/master/Data/CaseStudy2-data.csv", sep = ",", header = TRUE)
+CaseStudy2CompSetNoAttrition <- read.csv("https://raw.githubusercontent.com/lijjumathew/MSDS-Doing-Datascience-Project2/master/Data/CaseStudy2CompSet%20No%20Attrition.csv", sep = ",", header = TRUE)
+CaseStudy2CompSetNoSalary <- read.csv("https://raw.githubusercontent.com/lijjumathew/MSDS-Doing-Datascience-Project2/master/Data/CaseStudy2CompSet%20No%20Salary.csv", sep = ",", header = TRUE)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# Checking detatils of case study 2 dataset
+dim(CaseStudy2dataset)
+names(CaseStudy2dataset)
+str(CaseStudy2dataset)
+head(CaseStudy2dataset)
+summary(CaseStudy2dataset)
+# View(CaseStudy2dataset)
+
+# Data cleaning by drop some columns not related to the analysis
+# drops <- c("EmployeeCount", "EmployeeNumber", "Over18", "StandardHours")
+
+#As we can see from the structure we have lookup values for a few columns like Education, Environment Satisfaction, Job Involvement etc. So first we will replace these values with the actual description provided in the CaseStudy2dataset .We will also be removing a few columns from our CaseStudy2dataset which we wont be using in analysis further.
+CaseStudy2dataset <- CaseStudy2dataset %>%
+  mutate(Education = as.factor(if_else(Education == 1,"Below College", if_else(Education == 2, "College", if_else(Education == 3, "Bachelor", if_else(Education == 4, "Masters","Doctor")))))
+         ,EnvironmentSatisfaction = as.factor(if_else(EnvironmentSatisfaction == 1,"Low",if_else(EnvironmentSatisfaction == 2, "Medium", if_else(EnvironmentSatisfaction == 3, "High", "Very High"))))
+         ,JobInvolvement = as.factor(if_else(JobInvolvement == 1,"Low",if_else(JobInvolvement == 2, "Medium",if_else(JobInvolvement == 3, "High", "Very High"))))
+         ,JobSatisfaction = as.factor(if_else(JobSatisfaction == 1, "Low",if_else(JobSatisfaction == 2, "Medium",if_else(JobSatisfaction == 3, "High","Very High"))))
+         ,PerformanceRating = as.factor(if_else(PerformanceRating == 1, "Low",if_else(PerformanceRating == 2, "Good", if_else(PerformanceRating == 3, "Excellent", "Outstanding"))))
+         ,RelationshipSatisfaction = as.factor(if_else(RelationshipSatisfaction == 1, "Low",if_else(RelationshipSatisfaction == 2, "Medium", if_else(RelationshipSatisfaction == 3, "High", "Very High"))))
+         ,WorkLifeBalance = as.factor(if_else(WorkLifeBalance == 1, "Bad",if_else(WorkLifeBalance == 2, "Good", if_else(WorkLifeBalance == 3, "Better", "Best"))))
+         ,JobLevel = as.factor(JobLevel)
+         ) 
+
+CaseStudy2CompSetNoAttrition <- CaseStudy2CompSetNoAttrition %>%
+  mutate(Education = as.factor(if_else(Education == 1,"Below College", if_else(Education == 2, "College", if_else(Education == 3, "Bachelor", if_else(Education == 4, "Masters","Doctor")))))
+         ,EnvironmentSatisfaction = as.factor(if_else(EnvironmentSatisfaction == 1,"Low",if_else(EnvironmentSatisfaction == 2, "Medium", if_else(EnvironmentSatisfaction == 3, "High", "Very High"))))
+         ,JobInvolvement = as.factor(if_else(JobInvolvement == 1,"Low",if_else(JobInvolvement == 2, "Medium",if_else(JobInvolvement == 3, "High", "Very High"))))
+         ,JobSatisfaction = as.factor(if_else(JobSatisfaction == 1, "Low",if_else(JobSatisfaction == 2, "Medium",if_else(JobSatisfaction == 3, "High","Very High"))))
+         ,PerformanceRating = as.factor(if_else(PerformanceRating == 1, "Low",if_else(PerformanceRating == 2, "Good", if_else(PerformanceRating == 3, "Excellent", "Outstanding"))))
+         ,RelationshipSatisfaction = as.factor(if_else(RelationshipSatisfaction == 1, "Low",if_else(RelationshipSatisfaction == 2, "Medium", if_else(RelationshipSatisfaction == 3, "High", "Very High"))))
+         ,WorkLifeBalance = as.factor(if_else(WorkLifeBalance == 1, "Bad",if_else(WorkLifeBalance == 2, "Good", if_else(WorkLifeBalance == 3, "Better", "Best"))))
+         ,JobLevel = as.factor(JobLevel)
+         ) 
+
+CaseStudy2CompSetNoSalary <- CaseStudy2CompSetNoSalary %>%
+  mutate(Education = as.factor(if_else(Education == 1,"Below College", if_else(Education == 2, "College", if_else(Education == 3, "Bachelor", if_else(Education == 4, "Masters","Doctor")))))
+         ,EnvironmentSatisfaction = as.factor(if_else(EnvironmentSatisfaction == 1,"Low",if_else(EnvironmentSatisfaction == 2, "Medium", if_else(EnvironmentSatisfaction == 3, "High", "Very High"))))
+         ,JobInvolvement = as.factor(if_else(JobInvolvement == 1,"Low",if_else(JobInvolvement == 2, "Medium",if_else(JobInvolvement == 3, "High", "Very High"))))
+         ,JobSatisfaction = as.factor(if_else(JobSatisfaction == 1, "Low",if_else(JobSatisfaction == 2, "Medium",if_else(JobSatisfaction == 3, "High","Very High"))))
+         ,PerformanceRating = as.factor(if_else(PerformanceRating == 1, "Low",if_else(PerformanceRating == 2, "Good", if_else(PerformanceRating == 3, "Excellent", "Outstanding"))))
+         ,RelationshipSatisfaction = as.factor(if_else(RelationshipSatisfaction == 1, "Low",if_else(RelationshipSatisfaction == 2, "Medium", if_else(RelationshipSatisfaction == 3, "High", "Very High"))))
+         ,WorkLifeBalance = as.factor(if_else(WorkLifeBalance == 1, "Bad",if_else(WorkLifeBalance == 2, "Good", if_else(WorkLifeBalance == 3, "Better", "Best"))))
+         ,JobLevel = as.factor(JobLevel)
+         ) 
+
+CaseStudy2dataset <- CaseStudy2dataset[ , !(names(CaseStudy2dataset) %in% drops)]
+
+CaseStudy2CompSetNoAttrition <- CaseStudy2CompSetNoAttrition[ , !(names(CaseStudy2CompSetNoAttrition) %in% drops)]
+CaseStudy2CompSetNoAttrition = CaseStudy2CompSetNoAttrition[order(CaseStudy2CompSetNoAttrition$ID), ]
+
+colnames(CaseStudy2CompSetNoSalary)[colnames(CaseStudy2CompSetNoSalary)=="?..ID"] <- "ID"
+CaseStudy2CompSetNoSalary <- CaseStudy2CompSetNoSalary[ , !(names(CaseStudy2CompSetNoSalary) %in% drops)]
+#CaseStudy2CompSetNoSalary = CaseStudy2CompSetNoSalary[order(CaseStudy2CompSetNoSalary$ID), ]
+
+# Converting Character Variable into Numeric Vraiables
+CaseStudy2dataset$Attrition1[CaseStudy2dataset$Attrition== "Yes"] <-1
+CaseStudy2dataset$Attrition1[CaseStudy2dataset$Attrition== "No"] <-0
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+#Get a basic idea of all the variables
+summary(CaseStudy2dataset)
+#This gives us a high level view of the CaseStudy2dataset. We can see that we dont have any NULL values in our CaseStudy2dataset. We can also see that we just have 140 attrition records out of 870 which is approx. 16%. We need to keep this ratio maintained once we split the data in test and training for our model evaluation to avoid any biases.
+str(CaseStudy2dataset)
+summary(CaseStudy2CompSetNoAttrition)
+str(CaseStudy2CompSetNoAttrition)
+summary(CaseStudy2CompSetNoSalary)
+str(CaseStudy2CompSetNoSalary)
+```
+
+From the summary, it can be seen there is no NAs in the continuous variables. Struction of the dataframe CaseStudy2dataset shows, variables Attrition, BusinessTravel, Department, EducationField, Gender, JobRole, MatitalStatus, Overtime, are treated as factors.
+
+
+```{r}
+#Separate continuous and categorical variables for analysis
+CaseStudy2dataset_conti <- CaseStudy2dataset[, !sapply(CaseStudy2dataset, is.factor)]
+CaseStudy2dataset_categ <- CaseStudy2dataset[, sapply(CaseStudy2dataset, is.factor)]
+```
